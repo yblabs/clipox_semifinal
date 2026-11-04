@@ -13,17 +13,21 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from ..config import FFMPEG_BIN
+from ..config import FFMPEG_BIN, FFMPEG_THREADS
 
 _SCENE_PTS = re.compile(r"pts_time:([0-9]+\.?[0-9]*)")
 
 
 def detect_scenes(src: Path | str, *, threshold: float = 0.32, limit: int = 400) -> Optional[List[float]]:
     """Return sorted scene-change timestamps (seconds). ``[]``/``None`` = unknown."""
-    try:
-        return _pyscenedetect(src, threshold, limit)
-    except Exception:
-        pass
+    # PySceneDetect keeps a decoded frame buffer per core through OpenCV, which
+    # is what pushed a 512 MB container over the edge. On a constrained host go
+    # straight to the ffmpeg scan, whose threads we can pin.
+    if FFMPEG_THREADS <= 0:
+        try:
+            return _pyscenedetect(src, threshold, limit)
+        except Exception:
+            pass
     try:
         return _ffmpeg_scenes(src, min(threshold, 0.4), limit)
     except Exception:
@@ -41,9 +45,12 @@ def _pyscenedetect(src: Path | str, threshold: float, limit: int) -> List[float]
 def _ffmpeg_scenes(src: Path | str, threshold: float, limit: int) -> List[float]:
     if not shutil.which(FFMPEG_BIN):
         return []
+    # A decoder thread pool sized from the core count is the biggest memory
+    # spike in a scan of a long video, so cap it on constrained hosts.
+    decode_threads = ["-threads", str(FFMPEG_THREADS)] if FFMPEG_THREADS > 0 else []
     proc = subprocess.run(
         [
-            FFMPEG_BIN, "-hide_banner", "-i", str(src),
+            FFMPEG_BIN, "-hide_banner", *decode_threads, "-i", str(src),
             # commas inside the filter expression must be escaped for -vf
             "-vf", "select=gt(scene\\,{:.2f}),showinfo".format(threshold),
             "-an", "-f", "null", "-",

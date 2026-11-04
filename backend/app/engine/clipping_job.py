@@ -22,7 +22,7 @@ from .. import store
 from ..config import DOWNLOAD_DIR, MEDIA_DIR, UPLOAD_DIR
 from . import clipper, media, scenes
 from .clip_maker import generate_hooks, generate_metadata as platform_metadata
-from .transcribe import format_timestamp, transcribe_audio
+from .transcribe import format_timestamp, release_model, transcribe_audio
 
 STEPS = [
     "Fetch video",
@@ -226,6 +226,9 @@ def run(
     transcript["speakers"] = speakers["speakers"]
     transcript["speaker_count"] = speakers["count"]
     transcript["speaker_method"] = speakers["method"]
+    # The transcript is all that is needed from here on; keeping the model
+    # resident starves the scene detector and the encoder of RAM on small hosts.
+    release_model()
     report(1, 45, "Transcript ready")
 
     # 3. signals ------------------------------------------------------------

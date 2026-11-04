@@ -23,6 +23,7 @@ Schema
 """
 from __future__ import annotations
 
+import gc
 import threading
 import time
 from pathlib import Path
@@ -82,6 +83,21 @@ _model_key: Optional[str] = None
 _model_lock = threading.Lock()
 _batched = None
 _batched_key: Optional[str] = None
+
+
+def release_model() -> None:
+    """Drop the cached weights so their RAM is free for ffmpeg.
+
+    On a 512 MB host the model and an encoder cannot coexist; reloading costs a
+    couple of seconds, an OOM kill costs the whole job.
+    """
+    global _model, _model_key, _batched, _batched_key
+    with _model_lock:
+        _model = None
+        _model_key = None
+        _batched = None
+        _batched_key = None
+    gc.collect()
 
 
 class TranscriptionError(RuntimeError):
