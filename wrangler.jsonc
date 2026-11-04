@@ -5,9 +5,6 @@
   "assets": {
     "directory": "./dist"
   },
-  // Public backend origin. Freebuff Sites services can only hold env vars when they are created,
-// so keep it here as a plain string (a deploy with no origin becomes a 503,
-// which is easier to debug than a 404/503 mix on a repo-triggered build).
   
   "vars": {
     "API_ORIGIN": "https://clipox-api.onrender.com"
