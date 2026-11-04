@@ -18,6 +18,7 @@ so a single origin serves both the UI and the API during development.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,7 +65,41 @@ def health() -> dict:
         "llm_provider": provider_label(),
         "media_mount": f"/{MEDIA_MOUNT}",
         "fonts_mount": "/fonts",
+        "host": host_report(),
     }
+
+
+def host_report() -> dict:
+    """What this machine looks like to the pipeline.
+
+    Exposed so a host's real limits (container memory, encoder threads) can be
+    confirmed from outside instead of inferred from the crash it causes.
+    """
+    from .config import FFMPEG_THREADS
+
+    limit_mb = None
+    for path in ("/sys/fs/cgroup/memory.max",
+                 "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            raw = Path(path).read_text().strip()
+        except OSError:
+            continue
+        if raw.isdigit() and 0 < int(raw) < (1 << 50):
+            limit_mb = int(raw) // (1 << 20)
+            break
+    meminfo = {}
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines()[:2]:
+            key, value = line.split(":", 1)
+            meminfo[key] = value.strip()
+    except OSError:
+        pass
+    try:
+        cpus = len(os.sched_getaffinity(0))       # type: ignore[attr-defined]
+    except AttributeError:
+        cpus = os.cpu_count()
+    return {"cpu_count": cpus, "cgroup_mb": limit_mb,
+            "meminfo": meminfo, "ffmpeg_threads": FFMPEG_THREADS}
 
 
 # rendered clips, posters, exports (absolute paths under MEDIA_DIR)
