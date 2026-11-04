@@ -239,6 +239,9 @@ _YTDLP_FATAL = (
     "has been terminated",
     "copyright",
     "not made this video available in your country",
+    "this video is unavailable",
+    "video unavailable",
+    "incomplete youtube id",
 )
 
 
@@ -323,6 +326,11 @@ def _fail(errors: List[str], url: str):
     for err in errors:
         if err not in seen:
             seen.append(err)
+    # A dead video is reported as such by every client; blaming the bot wall
+    # there would send the visitor chasing a problem they cannot fix.
+    readable = [err for err in seen if not _bot_check(err)]
+    if readable and any(err is readable[0] for err in seen):
+        raise MediaError(readable[0])
     if any(_bot_check(err) for err in seen):
         # The raw extractor text tells the user nothing they can act on, but the
         # attempts show whether any player client got further than the others.
