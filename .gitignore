@@ -8,6 +8,7 @@ __pycache__/
 # Admin server — secrets, dependencies and feedback data are never committed
 .env
 server/.env
+backend/.render-api-key
 server/node_modules/
 server/data/
 .freebuff/
