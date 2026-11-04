@@ -183,7 +183,7 @@ def run(
         # the budget went.
         peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         peak_mb = peak_mb / (1 << 20) if sys.platform == "darwin" else peak_mb / 1024
-        log.info("[%s] %5.1f%% %s (peak rss %.0f MB)", task_id[:8], pct, label, peak_mb)
+        log.warning("[%s] %5.1f%% %s (peak rss %.0f MB)", task_id[:8], pct, label, peak_mb)
         if on_progress:
             on_progress(step, pct, label)
 
