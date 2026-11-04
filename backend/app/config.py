@@ -89,6 +89,21 @@ def discover_ffmpeg() -> str:
 
 FFMPEG_BIN = discover_ffmpeg()
 
+# ffmpeg encoder threads. libx264 sizes its pool from the host core count, so
+# on a shared container that reports many cores it allocates far more frame
+# buffers than a small RAM budget allows and the encoder is OOM-killed. 0 keeps
+# ffmpeg's default (fastest on a laptop); 1 caps memory on constrained hosts.
+FFMPEG_THREADS = int(os.getenv("WV_FFMPEG_THREADS", "0") or "0")
+
+
+def ffmpeg_thread_args() -> list[str]:
+    """Encoder flags that pin ffmpeg to one thread pool (empty when unset)."""
+    if FFMPEG_THREADS <= 0:
+        return []
+    n = str(FFMPEG_THREADS)
+    return ["-threads", n, "-x264-params", f"threads={n}:lookahead_threads=1"]
+
+
 # Clip Maker
 CLIP_COUNT = int(os.getenv("WV_CLIP_COUNT", "10"))         # clips to generate
 CLIP_MIN_SEC = float(os.getenv("WV_CLIP_MIN_SEC", "18"))   # shortest clip

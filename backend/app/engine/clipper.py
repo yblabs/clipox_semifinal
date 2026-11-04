@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import numpy as np
 
-from ..config import FFMPEG_BIN, MEDIA_DIR, WORK_DIR
+from ..config import FFMPEG_BIN, MEDIA_DIR, WORK_DIR, ffmpeg_thread_args
 from . import media, scenes
 from .ass import generate_ass, hex_to_ass, ass_time
 from .llm import LLMUnavailable, complete_json, configured as llm_configured
@@ -1418,6 +1418,7 @@ def render_piece(
         "-filter_complex", graph,
         "-map", vmap, "-map", "0:a?",
         "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+        *ffmpeg_thread_args(),
         "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
         "-movflags", "+faststart", "-shortest", str(dst),
     ]
@@ -1522,6 +1523,7 @@ def ensure_video(src: Path | str, out_dir: Path) -> Path:
            "-i", str(src), "-filter_complex", graph,
            "-map", "[v]", "-map", "1:a", "-shortest",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
+           *ffmpeg_thread_args(),
            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
            "-movflags", "+faststart", str(dst)]
     _run(cmd)

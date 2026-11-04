@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..config import FFMPEG_BIN, FFPROBE_BIN
+from ..config import FFMPEG_BIN, FFPROBE_BIN, ffmpeg_thread_args
 from . import effects as fx
 from .captions import build_ass, resolve_subtitle_style
 
@@ -583,6 +583,7 @@ def render_project(
     cmd += ["-filter_complex", ";".join(graph),
             "-map", f"[{acc_v}]", "-map", f"[{audio_out}]",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
+            *ffmpeg_thread_args(),
             "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.2",
             "-r", str(fps), "-g", str(fps * 2),
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
