@@ -6,27 +6,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/data/.hf
 
 # ffmpeg from Debian ships libass (burned-in captions) and libx264; libgomp1 is
-# needed by ctranslate2, libgl1/libglib by opencv, fonts-dejavu is a fallback face.
-# nodejs is not used directly: yt-dlp needs a JavaScript runtime to solve
-# YouTube's challenges and mint PO tokens, without which cloud IPs are refused.
-# Debian's own Node is too old for the BotGuard library, so take upstream's
-# build, then compile the token generator that yt-dlp calls per request.
-RUN curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz -o /tmp/node.tar.xz \
- && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
- && rm /tmp/node.tar.xz \
- && node --version
-
-RUN git clone --depth 1 --branch 2.0.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
-      /root/bgutil-ytdlp-pot-provider \
- && cd /root/bgutil-ytdlp-pot-provider/server \
- && npm ci --omit=optional \
- && npx tsc \
- && test -f build/generate_once.js
+# needed by ctranslate2, libgl1/libglib by opencv, fonts-dejavu is a fallback
+# face. curl/git/xz-utils are for the Node and token-generator steps below.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ffmpeg libgomp1 libgl1 libglib2.0-0 ca-certificates fonts-dejavu-core \
       curl git xz-utils \
  && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp needs a JavaScript runtime to solve YouTube's challenges and mint PO
+# tokens, without which cloud IPs are refused. Debian's own Node is too old for
+# the BotGuard library, so take upstream's build.
+RUN curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz -o /tmp/node.tar.xz \
+ && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
+ && rm /tmp/node.tar.xz \
+ && node --version
+
+# The token generator yt-dlp invokes per download; the matching Python plugin
+# comes in with the requirements file.
+RUN git clone --depth 1 --branch 2.0.2 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git \
+      /root/bgutil-ytdlp-pot-provider \
+ && cd /root/bgutil-ytdlp-pot-provider/server \
+ && npm ci \
+ && npx tsc \
+ && test -f build/generate_once.js
 
 WORKDIR /app
 
