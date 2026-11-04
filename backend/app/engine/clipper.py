@@ -134,6 +134,7 @@ def inspect_url(url: str) -> Dict[str, Any]:
         meta = media.fetch_metadata(url)
     except Exception as exc:  # yt-dlp raises many types
         message = str(exc).splitlines()[0] if str(exc) else repr(exc)
+        message = message.rstrip(".")   # some messages already end in a full stop
         raise ClipperError(
             f"Could not read that video: {message}. Check the link is public and playable."
         ) from exc
