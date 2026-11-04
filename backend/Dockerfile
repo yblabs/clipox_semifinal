@@ -30,7 +30,7 @@ ENV MALLOC_ARENA_MAX=2 \
     WV_WORK_DIR=/data \
     WV_FFMPEG=/usr/bin/ffmpeg \
     WV_FFPROBE=/usr/bin/ffprobe \
-    WV_WHISPER_MODEL=base \
+    WV_WHISPER_MODEL=tiny \
     WV_WHISPER_COMPUTE=int8 \
     WV_WHISPER_BATCH=8
 

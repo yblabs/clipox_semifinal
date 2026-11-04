@@ -174,6 +174,14 @@ _YTDLP_COOKIES_B64 = os.getenv("WV_YTDLP_COOKIES_B64", "").strip()
 _YTDLP_PROXY = os.getenv("WV_YTDLP_PROXY", "").strip()
 
 
+def auth_status() -> Dict[str, bool]:
+    """Whether yt-dlp has credentials or a non-datacenter egress available.
+
+    Reported by the health endpoint without exposing any cookie value.
+    """
+    return {"cookies": bool(_cookie_file()), "proxy": bool(_YTDLP_PROXY)}
+
+
 def _cookie_file() -> Optional[str]:
     """Path to a cookies file, accepting the file *or* its contents.
 

@@ -66,7 +66,15 @@ def health() -> dict:
         "media_mount": f"/{MEDIA_MOUNT}",
         "fonts_mount": "/fonts",
         "host": host_report(),
+        "ytdlp": ytdlp_report(),
     }
+
+
+def ytdlp_report() -> dict:
+    """Whether URL downloads have the credentials they need (values withheld)."""
+    from .engine.media import auth_status
+
+    return auth_status()
 
 
 def host_report() -> dict:
