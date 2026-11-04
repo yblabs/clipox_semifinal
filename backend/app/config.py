@@ -89,11 +89,36 @@ def discover_ffmpeg() -> str:
 
 FFMPEG_BIN = discover_ffmpeg()
 
-# ffmpeg encoder threads. libx264 sizes its pool from the host core count, so
-# on a shared container that reports many cores it allocates far more frame
-# buffers than a small RAM budget allows and the encoder is OOM-killed. 0 keeps
-# ffmpeg's default (fastest on a laptop); 1 caps memory on constrained hosts.
-FFMPEG_THREADS = int(os.getenv("WV_FFMPEG_THREADS", "0") or "0")
+def _memory_limited_host() -> bool:
+    """True when a cgroup caps this process below 1 GiB of RAM.
+
+    Shared containers advertise many cores but little memory, and libx264
+    sizes its thread pool (and frame buffers) from the core count. Knowing the
+    real limit lets the encoder be told to stay small without penalising a
+    laptop, which reports no cgroup limit.
+    """
+    for path in ("/sys/fs/cgroup/memory.max",
+                 "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            raw = Path(path).read_text().strip()
+        except OSError:
+            continue
+        if not raw.isdigit():
+            continue                      # cgroup v2 writes "max" for unlimited
+        limit = int(raw)
+        if limit <= 0 or limit >= (1 << 50):
+            continue                      # cgroup v1 sentinel for unlimited
+        return limit <= (1 << 30)         # 1 GiB
+    return False
+
+
+# ffmpeg encoder threads. 0 lets ffmpeg decide (fastest on a laptop), 1 keeps
+# the encoder inside a small memory budget. Constrained hosts get 1 by default;
+# WV_FFMPEG_THREADS overrides either way.
+_FFMPEG_THREADS_ENV = os.getenv("WV_FFMPEG_THREADS", "").strip()
+FFMPEG_THREADS = int(_FFMPEG_THREADS_ENV) if _FFMPEG_THREADS_ENV else (
+    1 if _memory_limited_host() else 0
+)
 
 
 def ffmpeg_thread_args() -> list[str]:
