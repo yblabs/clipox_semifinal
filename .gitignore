@@ -9,6 +9,9 @@ __pycache__/
 .env
 server/.env
 backend/.render-api-key
+# Exported browser cookies for yt-dlp (YouTube bot checks)
+backend/yt-cookies.txt
+backend/*.cookies.txt
 server/node_modules/
 server/data/
 .freebuff/
