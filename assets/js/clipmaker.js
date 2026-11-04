@@ -21,8 +21,12 @@
     settings: {
       language: 'auto', clip_length: 'auto', count: 6, platform: 'all',
       instruction: '', clip_kind: 'normal', layout: 'Fit',
-      style: { motion: 'moving', palette: 'brand', font: 'Montserrat', size: 'medium', placement: 'center' },
+      // No colour picker any more: word highlight always renders white text
+      // with a single yellow word, and the other presets use the white/black
+      // 'classic' palette.
+      style: { motion: 'moving', palette: 'classic', font: 'Montserrat', size: 'medium', placement: 'center', preset: 'classic' },
     },
+    placeTouched: false,      // has the user picked a placement themselves?
     source: null,             // inspected URL or finished upload
     sourceMode: 'url',
     uploading: null,          // { upload_id, file, offset }
@@ -131,12 +135,17 @@
 
   /* --------------------------------------------------------------- boot */
   async function detectApi() {
-    for (const base of ['', 'http://127.0.0.1:8000', 'http://localhost:8000']) {
-      try {
-        const res = await fetch(base + '/api/health', { cache: 'no-store' });
-        if (res.ok) { API = base; state.apiReady = true; return; }
-      } catch (e) { /* try next */ }
-    }
+    /* SAME ORIGIN ONLY — never probe 127.0.0.1/localhost. On a public page
+       those requests are what triggered Chrome's "Access other apps and
+       services on this device" permission prompt, which makes visitors
+       distrust the site. The Node server serves the site and the API on ONE
+       origin. To use a backend hosted elsewhere, set window.CLIPOX_API
+       (absolute origin, e.g. 'https://api.example.com') before this script. */
+    const base = window.CLIPOX_API || '';
+    try {
+      const res = await fetch(base + '/api/health', { cache: 'no-store' });
+      if (res.ok) { API = base; state.apiReady = true; return; }
+    } catch (e) { /* no backend on this origin */ }
     state.apiReady = false;
   }
 
@@ -240,14 +249,15 @@
         `<option ${l === state.settings.layout ? 'selected' : ''}>${esc(l)}</option>`).join('');
       $('#motionChips').innerHTML = opts.motions.map((m) =>
         `<button class="chip ${m === state.settings.style.motion ? 'active' : ''}" data-motion="${esc(m)}">${m === 'moving' ? 'Word highlight' : 'Stationary'}</button>`).join('');
-      $('#paletteChips').innerHTML = opts.palettes.map((p) =>
-        `<button class="chip ${p === state.settings.style.palette ? 'active' : ''}" data-palette="${esc(p)}">${esc(p)}</button>`).join('');
       $('#fontSelect').innerHTML = opts.fonts.map((f) =>
         `<option ${f === state.settings.style.font ? 'selected' : ''}>${esc(f)}</option>`).join('');
       $('#sizeSelect').innerHTML = opts.sizes.map((s) =>
         `<option ${s === state.settings.style.size ? 'selected' : ''}>${esc(s)}</option>`).join('');
       $('#placeChips').innerHTML = opts.placements.map((p) =>
         `<button class="chip ${p === state.settings.style.placement ? 'active' : ''}" data-place="${esc(p)}">${esc(p)}</button>`).join('');
+      const presets = opts.presets || ['classic', 'hook', 'karaoke'];
+      $('#presetChips').innerHTML = presets.map((p) =>
+        `<button class="chip ${p === state.settings.style.preset ? 'active' : ''}" data-preset="${esc(p)}">${esc(PRESET_LABELS[p] || p)}</button>`).join('');
 
       bindSettingChips();
       paintStyleSummary();
@@ -272,23 +282,39 @@
       $$('#motionChips .chip').forEach((x) => x.classList.toggle('active', x === b));
       paintStyleSummary();
     }));
-    $$('#paletteChips .chip').forEach((b) => b.addEventListener('click', () => {
-      state.settings.style.palette = b.dataset.palette;
-      $$('#paletteChips .chip').forEach((x) => x.classList.toggle('active', x === b));
-      paintStyleSummary();
-    }));
     $$('#placeChips .chip').forEach((b) => b.addEventListener('click', () => {
-      state.settings.style.placement = b.dataset.place;
-      $$('#placeChips .chip').forEach((x) => x.classList.toggle('active', x === b));
-      paintStyleSummary();
+      state.placeTouched = true;
+      setPlacement(b.dataset.place);
+    }));
+    $$('#presetChips .chip').forEach((b) => b.addEventListener('click', () => {
+      applyPreset(b.dataset.preset);
     }));
   }
+
+  function setPlacement(value) {
+    state.settings.style.placement = value;
+    $$('#placeChips .chip').forEach((x) => x.classList.toggle('active', x.dataset.place === value));
+    paintStyleSummary();
+  }
+
+  function applyPreset(value) {
+    state.settings.style.preset = value;
+    $$('#presetChips .chip').forEach((x) => x.classList.toggle('active', x.dataset.preset === value));
+    // Hook captions read best lower-centre; only move the placement the user
+    // has not chosen themselves.
+    if (!state.placeTouched) setPlacement(value === 'hook' ? 'bottom' : 'center');
+    paintStyleSummary();
+  }
+
+  const PRESET_LABELS = { classic: 'Classic', hook: 'Hook style', karaoke: 'Karaoke' };
 
   function paintStyleSummary() {
     const s = state.settings.style;
     const cap = (v) => (v || '').charAt(0).toUpperCase() + (v || '').slice(1);
-    $('#styleSummary').textContent =
-      [s.motion === 'moving' ? 'Moving' : 'Stationary', cap(s.palette), s.font, cap(s.size), cap(s.placement)].join(' · ');
+    const parts = [s.motion === 'moving' ? 'Word highlight' : 'Stationary',
+                   s.font, cap(s.size), cap(s.placement)];
+    if (s.preset && s.preset !== 'classic') parts.unshift(PRESET_LABELS[s.preset] || s.preset);
+    $('#styleSummary').textContent = parts.join(' · ');
   }
 
   async function loadCredits() {
@@ -366,11 +392,15 @@
     $('#sizeSelect').addEventListener('change', (e) => { state.settings.style.size = e.target.value; paintStyleSummary(); });
 
     $$('#kindMode button').forEach((b) => b.addEventListener('click', () => {
-      state.settings.clip_kind = b.dataset.kind;
+      const kind = b.dataset.kind;
+      state.settings.clip_kind = kind;
       $$('#kindMode button').forEach((x) => x.classList.toggle('active', x === b));
-      $('#kindHint').textContent = b.dataset.kind === 'hook'
+      $('#kindHint').textContent = kind === 'hook'
         ? 'Hook mode — the same clips plus 7 scroll-stopping hooks each (research-backed, A/B pick and a variant).'
         : 'Standard cut — scored moments with titles, a hook, caption and hashtags.';
+      // Hook clips auto-select the Hook caption preset (and lower-centre
+      // placement); both stay user-overridable through the chips below.
+      applyPreset(kind === 'hook' ? 'hook' : 'classic');
     }));
 
     $('#createBtn').addEventListener('click', startJob);
@@ -381,6 +411,28 @@
     const box = $('#inputErr');
     box.textContent = msg || '';
     box.classList.toggle('hidden', !msg);
+  }
+
+  function switchToUpload() {
+    state.sourceMode = 'upload';
+    $$('#srcMode button').forEach((x) => x.classList.toggle('active', x.dataset.mode === 'upload'));
+    $$('.pane').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== 'upload'));
+  }
+
+  /* An error the visitor can act on: the message plus the one control that
+     gets them unstuck, instead of a red box with no way forward. */
+  function showInputAction(msg, label, onClick) {
+    const box = $('#inputErr');
+    box.textContent = '';
+    box.classList.remove('hidden');
+    box.append(document.createTextNode(msg + ' '));
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.style.cssText = 'background:none;border:0;padding:0;margin:0;font:inherit;' +
+      'color:inherit;text-decoration:underline;cursor:pointer';
+    btn.addEventListener('click', onClick);
+    box.append(btn);
   }
 
   async function inspectUrl(url) {
@@ -394,7 +446,18 @@
     } catch (e) {
       state.source = null;
       renderPreview();
-      showInputError(e.message);
+      const message = e.message || '';
+      // YouTube refuses cloud IPs outright; a retry will never succeed, so
+      // point at the path that does work instead of leaving a dead end.
+      if (/bot check|blocking downloads/i.test(message)) {
+        showInputAction('YouTube blocks downloads from this server.', 'Upload the file instead', () => {
+          switchToUpload();
+          const picker = $('#fileInput');
+          if (picker) picker.click();
+        });
+      } else {
+        showInputError(message);
+      }
     }
   }
 
@@ -549,18 +612,20 @@
     btn.innerHTML = '<span class="spinner"></span> Starting…';
 
     try {
-      const job = await api('/api/ai-clipping/jobs', {
-        method: 'POST',
-        body: {
-          source: src.source_type === 'upload' ? src.source : src.url,
-          source_type: src.source_type,
-          meta: {
-            title: src.title, duration: src.duration, thumbnail: src.thumbnail,
-            channel: src.channel, platform: src.platform,
-          },
-          settings: state.settings,
+      const payload = {
+        source: src.source_type === 'upload' ? src.source : src.url,
+        source_type: src.source_type,
+        meta: {
+          title: src.title, duration: src.duration, thumbnail: src.thumbnail,
+          channel: src.channel, platform: src.platform,
         },
-      });
+        settings: state.settings,
+      };
+      // Caption settings, exactly as they are about to be sent. If a chip
+      // looks selected but the render disagrees, this line shows which value
+      // actually left the browser.
+      console.log('[clip-maker] create job payload', JSON.parse(JSON.stringify(payload)));
+      const job = await api('/api/ai-clipping/jobs', { method: 'POST', body: payload });
       state.job = job;
       showJobPanel(job);
       trackJob(job.task_id);
@@ -1028,7 +1093,7 @@
         method: 'POST',
         body: {
           video_id: state.video.id, moment_ids: [m.id], resolution: '1080p',
-          options: { captions: true, hook: true, watermark: false }, zip: false,
+          options: { captions: true, hook: false, watermark: false }, zip: false,
         },
       });
       await pollJob(res.task_id, 'Rendering clip');
@@ -1146,7 +1211,6 @@
   function bulkEditModal() {
     const list = selectedMoments();
     const layouts = (state.options && state.options.layouts) || ['Full', 'Fit', 'Split', 'Trio', 'Grid', 'PiP'];
-    const palettes = (state.options && state.options.palettes) || ['classic', 'white', 'neon', 'contrast', 'brand', 'ocean'];
     openModal({
       title: `Bulk edit ${list.length} clips`,
       body: `<label class="field-label">Reframe layout</label>
@@ -1154,25 +1218,16 @@
           <button class="opt active" data-blayout="">Keep current</button>
           ${layouts.map((l) => `<button class="opt" data-blayout="${esc(l)}">${esc(l)}</button>`).join('')}
         </div>
-        <label class="field-label" style="margin-top:14px">Caption colour (applies to the whole project)</label>
-        <div class="opt-grid" id="bPalettes">
-          <button class="opt active" data-bpal="">Keep current</button>
-          ${palettes.map((p) => `<button class="opt" data-bpal="${esc(p)}">${esc(p)}</button>`).join('')}
-        </div>
         <label class="field-label" style="margin-top:14px">Hook text (optional)</label>
         <input class="input" id="bHook" maxlength="120" placeholder="Leave empty to keep each clip's own hook">
         <p class="hint">Layout changes re-render each preview. Brand kit items live in the AI editor's Brand Kit panel.</p>`,
       footer: `<button class="btn btn-ghost" data-close>Cancel</button>
                <button class="btn btn-primary" id="bApply">Apply to ${list.length}</button>`,
       onMount(root, close) {
-        let layout = '', palette = '';
+        let layout = '';
         $$('[data-blayout]', root).forEach((b) => b.addEventListener('click', () => {
           layout = b.dataset.blayout;
           $$('[data-blayout]', root).forEach((x) => x.classList.toggle('active', x === b));
-        }));
-        $$('[data-bpal]', root).forEach((b) => b.addEventListener('click', () => {
-          palette = b.dataset.bpal;
-          $$('[data-bpal]', root).forEach((x) => x.classList.toggle('active', x === b));
         }));
         $('#bApply', root).addEventListener('click', async (e) => {
           const btn = e.currentTarget;
@@ -1191,19 +1246,9 @@
               done += 1;
             } catch (err) { toast('One clip failed', err.message, 'err'); }
           }
-          if (palette) {
-            try {
-              const res = await api(`/api/ai-clipping/videos/${state.video.id}/restyle`, {
-                method: 'POST',
-                body: { palette, moment_ids: list.map((m) => m.id) },
-              });
-              await pollJob(res.task_id, 'Re-styling captions');
-            } catch (err) { toast('Style update failed', err.message, 'err'); }
-          }
           close();
           toast('Bulk edit applied', `${done} clip(s) updated`, 'ok');
-          if (palette) openVideo(state.video.id);
-          else renderGrid();
+          renderGrid();
         });
       },
     });
@@ -1222,7 +1267,6 @@
         <label class="field-label" style="margin-top:14px">Include</label>
         <div class="chips" id="expOpts">
           <button class="chip active" data-opt="captions">Burned captions</button>
-          <button class="chip active" data-opt="hook">Hook overlay</button>
           <button class="chip" data-opt="watermark">Watermark</button>
           <button class="chip" data-opt="cold_open">Cold-open teaser</button>
         </div>
@@ -1231,7 +1275,7 @@
                <button class="btn btn-primary" id="expGo">Render &amp; download</button>`,
       onMount(root, close) {
         let resolution = '1080p';
-        const opts = { captions: true, hook: true, watermark: false, cold_open: false };
+        const opts = { captions: true, hook: false, watermark: false, cold_open: false };
         $$('[data-res]', root).forEach((b) => b.addEventListener('click', () => {
           resolution = b.dataset.res;
           $$('[data-res]', root).forEach((x) => x.classList.toggle('active', x === b));
