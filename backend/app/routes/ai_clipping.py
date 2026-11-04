@@ -115,6 +115,7 @@ def options() -> Dict[str, Any]:
         "fonts": list(clipping_job.FONTS),
         "sizes": list(clipping_job.SIZES),
         "placements": list(clipping_job.PLACEMENTS),
+        "presets": list(clipping_job.PRESETS),
         "motions": list(clipping_job.MOTIONS),
         "resolutions": list(RESOLUTIONS),
         "upload": {"chunk_size": CHUNK_SIZE, "max_mb": UPLOAD_MAX_MB,
@@ -451,7 +452,7 @@ def _rerender_preview(doc: Dict[str, Any], moment: Dict[str, Any], index: int) -
     path = clipper.render_moment(
         doc["local_path"], moment, out_dir, name=name, height=clipping_job.PREVIEW_HEIGHT,
         style=(doc.get("settings") or {}).get("style"), transcript=transcript,
-        captions=True, hook_overlay=True, preset="ultrafast", crf=30,
+        captions=True, preset="ultrafast", crf=30,
     )
     moment["preview"] = path.name
     poster = media.make_thumbnail(path, out_dir / f"{name}.jpg", at_sec=0.4)
@@ -814,7 +815,7 @@ def export_clips(body: ExportBody) -> Dict[str, Any]:
             path = clipper.render_moment(
                 doc["local_path"], moment, out_dir, name=name, height=height,
                 style=(doc.get("settings") or {}).get("style"), transcript=transcript,
-                captions=options["captions"], hook_overlay=options["hook"],
+                captions=options["captions"],
                 watermark="ClipOX" if options["watermark"] else "",   # brand matches the site
                 cold_open=options["cold_open"], preset="veryfast", crf=20,
                 on_progress=lambda p: STORE.update(task.id, progress=3 + ((i + p) / len(moments)) * 85),
@@ -925,7 +926,7 @@ def montage(body: MontageBody) -> Dict[str, Any]:
             pieces.append(clipper.render_moment(
                 doc["local_path"], moment, out_dir, name=f"part_{i + 1:02d}", height=height,
                 style=(doc.get("settings") or {}).get("style"), transcript=transcript,
-                captions=body.captions, hook_overlay=False, preset="veryfast", crf=20,
+                captions=body.captions, preset="veryfast", crf=20,
             ))
         STORE.stage(task.id, 1, 88, "Joining clips")
         music = ""

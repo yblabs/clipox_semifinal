@@ -1,0 +1,9 @@
+.venv/
+work/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.log
+tests_*.py
+sample*.py
+samples/

@@ -1,0 +1,37 @@
+# Render blueprint for the Clip OX backend.
+#
+# Free plan reality check: 512 MB RAM, 0.1 CPU, ephemeral disk, and the service
+# sleeps after 15 idle minutes. The env below is tuned to survive that (tiny
+# Whisper model, one thread, /tmp storage) at the cost of speed; rendered clips
+# do not survive a restart on the free plan.
+
+services:
+  - type: web
+    name: clipox-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: WV_WORK_DIR
+        value: /tmp/work
+      - key: HF_HOME
+        value: /tmp/hf
+      - key: WV_WHISPER_MODEL
+        value: tiny
+      - key: WV_WHISPER_COMPUTE
+        value: int8
+      - key: WV_WHISPER_BATCH
+        value: "1"
+      - key: WV_WHISPER_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      # Add these in the Render dashboard (Environment) if you enable LLM
+      # moment selection — never commit real keys:
+      #   WV_LLM_API_KEY / OPENAI_API_KEY, WV_LLM_BASE_URL, WV_LLM_MODEL

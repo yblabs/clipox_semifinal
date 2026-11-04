@@ -1343,44 +1343,6 @@ def layout_graph(layout: str, w: int, h: int) -> str:
     return f"[0:v]{fill},setsar=1[base]"
 
 
-def _hook_ass(text: str, out: Path, *, w: int, h: int, duration: float = 3.4) -> Path:
-    """Styled hook box burned over the first seconds of a clip."""
-    text = re.sub(r"\s+", " ", (text or "").strip())
-    words = text.split()
-    if len(words) > 12:
-        text = " ".join(words[:12])
-    safe = text.replace("{", "(").replace("}", ")").replace("\\", "")
-    # wrap to ~24 chars per line, max 3 lines
-    lines: List[str] = []
-    current = ""
-    for word in safe.split():
-        if len(current) + len(word) + 1 > 24 and current:
-            lines.append(current)
-            current = word
-        else:
-            current = (current + " " + word).strip()
-    if current:
-        lines.append(current)
-    wrapped = "\\N".join(lines[:3])
-    size = int(h * 0.048)
-    content = (
-        "[Script Info]\nScriptType: v4.00+\n"
-        f"PlayResX: {w}\nPlayResY: {h}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n"
-        "[V4+ Styles]\n"
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
-        "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
-        "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        f"Style: Hook,Montserrat,{size},{hex_to_ass('#04120B')},{hex_to_ass('#04120B')},"
-        f"{hex_to_ass('#2BF5A0')},{hex_to_ass('#04120B')},-1,0,0,0,100,100,0,0,3,"
-        f"{max(10, int(size * 0.5))},0,8,"
-        f"{int(w * 0.08)},{int(w * 0.08)},{int(h * 0.09)},1\n\n"
-        "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-        f"Dialogue: 0,{ass_time(0)},{ass_time(duration)},Hook,,0,0,0,,{{\\fad(120,200)}}{wrapped}\n"
-    )
-    out.write_text(content, encoding="utf-8")
-    return out
-
-
 def _watermark_filter(text: str, w: int, h: int) -> str:
     safe = re.sub(r"[^A-Za-z0-9 ._&-]", "", text or "WayinVideo")[:40] or "WayinVideo"
     size = max(12, int(h * 0.022))
@@ -1429,20 +1391,16 @@ def render_piece(
     h: int,
     layout: str = "Full",
     captions: Optional[Path] = None,
-    hook: Optional[Path] = None,
     watermark: str = "",
     crf: int = 20,
     preset: str = "veryfast",
 ) -> Path:
-    """Render one keep-interval: layout + burned captions + optional hook/watermark."""
+    """Render one keep-interval: layout + burned captions + optional watermark."""
     graph = layout_graph(layout, w, h)
     chain = "[base]"
     extras: List[str] = []
     if captions:
         p = str(Path(captions).resolve()).replace(":", "\\:").replace("'", "\\'")
-        extras.append(f"ass='{p}':fontsdir='{_fonts_dir().replace(chr(39), chr(92) + chr(39))}'")
-    if hook:
-        p = str(Path(hook).resolve()).replace(":", "\\:").replace("'", "\\'")
         extras.append(f"ass='{p}':fontsdir='{_fonts_dir().replace(chr(39), chr(92) + chr(39))}'")
     if watermark:
         extras.append(_watermark_filter(watermark, w, h))
@@ -1482,7 +1440,6 @@ def render_moment(
     style: Optional[Dict[str, Any]] = None,
     transcript: Optional[Dict[str, Any]] = None,
     captions: bool = True,
-    hook_overlay: bool = True,
     watermark: str = "",
     cold_open: bool = False,
     preset: str = "veryfast",
@@ -1517,12 +1474,9 @@ def render_moment(
             retimed = _retime_segments(segments, piece_start, piece_end)
             if retimed:
                 cap_path = generate_ass(retimed, style, out_dir / f"{name}_cap_{i}.ass")
-        hook_path = None
-        if hook_overlay and i == 0 and moment.get("hook_text"):
-            hook_path = _hook_ass(moment["hook_text"], out_dir / f"{name}_hook.ass", w=w, h=h)
         piece_path = out_dir / f"{name}_p{i}.mp4"
         render_piece(src, piece_path, start=piece_start, duration=span, w=w, h=h,
-                     layout=layout, captions=cap_path, hook=hook_path,
+                     layout=layout, captions=cap_path,
                      watermark=watermark, crf=crf, preset=preset)
         rendered.append(piece_path)
         if on_progress:

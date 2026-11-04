@@ -12,6 +12,7 @@ Library and export endpoints can reopen it by id.
 """
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -35,11 +36,13 @@ STEPS = [
 
 ProgressFn = Callable[[int, float, str], None]
 
+log = logging.getLogger(__name__)
+
 PREVIEW_HEIGHT = 854
 
 DEFAULT_STYLE = {
     "motion": "moving", "palette": "brand", "font": "Montserrat",
-    "size": "medium", "placement": "center",
+    "size": "medium", "placement": "center", "preset": "classic",
 }
 
 MOTIONS = ("stationary", "moving")
@@ -47,16 +50,33 @@ PALETTES = ("classic", "white", "neon", "contrast", "brand", "ocean")
 FONTS = ("Montserrat", "Impact", "Anton", "Poppins")
 SIZES = ("small", "medium", "large")
 PLACEMENTS = ("bottom", "center", "top")
+PRESETS = ("classic", "hook", "karaoke")
+
+
+def _pick(raw: Dict[str, Any], key: str, allowed, default: str) -> str:
+    """Keep ``raw[key]`` when it is known; otherwise warn and use *default*.
+
+    A silent fallback here is what made broken Colour / Placement selections
+    look like a renderer bug: the UI showed one thing, the render used another
+    and nothing was ever logged.
+    """
+    value = raw.get(key)
+    if value in allowed:
+        return value
+    if value not in (None, ""):
+        log.warning("caption style: unknown %s=%r — falling back to %r", key, value, default)
+    return default
 
 
 def clean_style(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     raw = raw or {}
     return {
-        "motion": raw.get("motion") if raw.get("motion") in MOTIONS else DEFAULT_STYLE["motion"],
-        "palette": raw.get("palette") if raw.get("palette") in PALETTES else DEFAULT_STYLE["palette"],
-        "font": raw.get("font") if raw.get("font") in FONTS else DEFAULT_STYLE["font"],
-        "size": raw.get("size") if raw.get("size") in SIZES else DEFAULT_STYLE["size"],
-        "placement": raw.get("placement") if raw.get("placement") in PLACEMENTS else DEFAULT_STYLE["placement"],
+        "motion": _pick(raw, "motion", MOTIONS, DEFAULT_STYLE["motion"]),
+        "palette": _pick(raw, "palette", PALETTES, DEFAULT_STYLE["palette"]),
+        "font": _pick(raw, "font", FONTS, DEFAULT_STYLE["font"]),
+        "size": _pick(raw, "size", SIZES, DEFAULT_STYLE["size"]),
+        "placement": _pick(raw, "placement", PLACEMENTS, DEFAULT_STYLE["placement"]),
+        "preset": _pick(raw, "preset", PRESETS, DEFAULT_STYLE["preset"]),
     }
 
 
@@ -81,6 +101,16 @@ def clean_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     layout = str(raw.get("layout") or "Full")
     if layout not in clipper.LAYOUTS:
         layout = "Full"
+    raw_style = dict(raw.get("style") or {})
+    style = clean_style(raw_style)
+    # Hook clips auto-select the Hook caption preset. An explicit preset from
+    # the client always wins, so the user can override the auto-selection.
+    if kind == "hook" and "preset" not in raw_style:
+        style["preset"] = "hook"
+    if style["preset"] in ("hook", "karaoke") and "placement" not in raw_style:
+        # Hook and Karaoke captions default to lower-middle, above the platform
+        # UI safe zone; an explicit placement from the client still wins.
+        style["placement"] = "bottom"
     return {
         "language": language,
         "clip_length": clip_length,
@@ -89,7 +119,7 @@ def clean_settings(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "instruction": str(raw.get("instruction") or "").strip()[:500],
         "clip_kind": kind,
         "layout": layout,
-        "style": clean_style(raw.get("style")),
+        "style": style,
         "translate": str(raw.get("translate") or ""),
     }
 
@@ -292,7 +322,7 @@ def run(
         try:
             path = clipper.render_moment(
                 src, moment, out_dir, name=preview_name, height=PREVIEW_HEIGHT,
-                style=style, transcript=transcript, captions=True, hook_overlay=True,
+                style=style, transcript=transcript, captions=True,
                 preset="ultrafast", crf=30,
                 on_progress=lambda p, i=index: report(
                     6, 97 + ((i + p) / max(1, len(moments))) * 3, "Rendering previews"),

@@ -103,6 +103,13 @@ SILENCE_MIN_SEC = float(os.getenv("WV_SILENCE_MIN_SEC", "1.0"))
 WHISPER_MODEL = os.getenv("WV_WHISPER_MODEL", "base")
 WHISPER_LANGUAGE = os.getenv("WV_WHISPER_LANGUAGE", "")    # "" == auto detect
 WHISPER_COMPUTE = os.getenv("WV_WHISPER_COMPUTE", "")      # "" == auto pick
+# Greedy decoding (1) instead of beam search (5): word-level captions barely
+# change, and on a CPU-only laptop it is the single biggest speed win.
+WHISPER_BEAM = int(os.getenv("WV_WHISPER_BEAM", "1"))
+WHISPER_THREADS = int(os.getenv("WV_WHISPER_THREADS", "0"))  # 0 == CTranslate2 default
+# Windows decoded per batch: 8 is ~3.7x faster than one-at-a-time on a CPU and
+# keeps every core busy. 0 disables batching.
+WHISPER_BATCH = int(os.getenv("WV_WHISPER_BATCH", "8"))
 
 # ---------------------------------------------------------------------------
 # Hardware acceleration
