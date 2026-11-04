@@ -25,7 +25,7 @@ RUN git clone --depth 1 --branch 2.0.2 https://github.com/Brainicism/bgutil-ytdl
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ffmpeg libgomp1 libgl1 libglib2.0-0 ca-certificates fonts-dejavu-core \
-      git xz-utils \
+      curl git xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
