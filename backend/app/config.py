@@ -127,8 +127,12 @@ def ffmpeg_thread_args() -> list[str]:
         return []
     n = str(FFMPEG_THREADS)
     # A short rate-control lookahead keeps x264 from buffering dozens of
-    # frames (each several MB at 1080x1920) while it plans the bitrate.
+    # frames (each several MB at 1080x1920) while it plans the bitrate, and the
+    # filter graph is pinned too: by default it gets a thread per core, each
+    # holding full-size frames, which is the second half of the spike.
     return ["-threads", n,
+            "-filter_threads", n,
+            "-filter_complex_threads", n,
             "-x264-params", f"threads={n}:lookahead_threads=1:rc-lookahead=6"]
 
 

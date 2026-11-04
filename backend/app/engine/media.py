@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from ..config import FFMPEG_BIN, FFPROBE_BIN, TARGET_H, TARGET_W
+from ..config import FFMPEG_BIN, FFPROBE_BIN, TARGET_H, TARGET_W, ffmpeg_thread_args
 
 
 class MediaError(RuntimeError):
@@ -368,6 +368,9 @@ def render_clip(
         "-ss", f"{max(start, 0.0):.3f}",
         "-i", str(src),
         "-t", f"{max(duration, 0.1):.3f}",
+        # Pinned decode/encoder/filter threads: the default one-thread-per-core
+        # pool buffers full-size frames and does not fit a small container.
+        *ffmpeg_thread_args(),
     ]
     if filters:
         cmd += ["-vf", ",".join(filters)]
