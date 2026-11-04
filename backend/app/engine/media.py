@@ -14,6 +14,7 @@ import resource
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -167,6 +168,27 @@ _YTDLP_CLIENTS: List[Optional[str]] = [None, "android", "tv", "ios"]
 _YTDLP_COOKIES = os.getenv("WV_YTDLP_COOKIES", "").strip()
 _YTDLP_PROXY = os.getenv("WV_YTDLP_PROXY", "").strip()
 
+
+def _cookie_file() -> Optional[str]:
+    """Path to a cookies file, accepting the file *or* its contents.
+
+    Hosted deployments have no shell to drop a file into, so the cookie text
+    from a browser export can be given directly as an environment value.
+    """
+    if not _YTDLP_COOKIES:
+        return None
+    path = Path(_YTDLP_COOKIES)
+    if path.is_file():
+        return str(path)
+    if "# Netscape" in _YTDLP_COOKIES or "\t" in _YTDLP_COOKIES:
+        target = Path(tempfile.gettempdir()) / "yt_cookies.txt"
+        try:
+            target.write_text(_YTDLP_COOKIES, encoding="utf-8")
+            return str(target)
+        except OSError:
+            return None
+    return None
+
 # Format selectors from strictest (mp4 + m4a only) to loosest.
 _YTDLP_FORMATS: List[str] = [
     "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b",
@@ -207,8 +229,9 @@ def _ytdlp_options(fmt: str, client: Optional[str], outtmpl: Optional[str] = Non
     if outtmpl:
         opts["outtmpl"] = outtmpl
         opts["merge_output_format"] = "mp4"
-    if _YTDLP_COOKIES and Path(_YTDLP_COOKIES).is_file():
-        opts["cookiefile"] = _YTDLP_COOKIES
+    cookies = _cookie_file()
+    if cookies:
+        opts["cookiefile"] = cookies
     if _YTDLP_PROXY:
         opts["proxy"] = _YTDLP_PROXY
     if client:
