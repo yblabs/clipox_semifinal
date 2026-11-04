@@ -20,7 +20,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY assets ./assets
 
-ENV WV_WORK_DIR=/data \
+# glibc keeps freed model memory in per-thread arenas and does not hand it
+# back by default; on a 512 MB host that is the difference between a job
+# finishing and being killed mid-render.
+ENV MALLOC_ARENA_MAX=2 \
+    MALLOC_TRIM_THRESHOLD_=131072 \
+    MALLOC_MMAP_THRESHOLD_=131072 \
+    MALLOC_TOP_PAD_=0 \
+    WV_WORK_DIR=/data \
     WV_FFMPEG=/usr/bin/ffmpeg \
     WV_FFPROBE=/usr/bin/ffprobe \
     WV_WHISPER_MODEL=base \

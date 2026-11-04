@@ -48,6 +48,9 @@ def _ffmpeg_scenes(src: Path | str, threshold: float, limit: int) -> List[float]
     # A decoder thread pool sized from the core count is the biggest memory
     # spike in a scan of a long video, so cap it on constrained hosts.
     decode_threads = ["-threads", str(FFMPEG_THREADS)] if FFMPEG_THREADS > 0 else []
+    from .media import log_mem
+
+    log_mem("before scene scan")
     proc = subprocess.run(
         [
             FFMPEG_BIN, "-hide_banner", *decode_threads, "-i", str(src),
@@ -60,6 +63,7 @@ def _ffmpeg_scenes(src: Path | str, threshold: float, limit: int) -> List[float]
         text=True,
         timeout=1800,
     )
+    log_mem("after scene scan")
     found = [float(m) for m in _SCENE_PTS.findall(proc.stderr or "")]
     return sorted(set(found))[:limit]
 

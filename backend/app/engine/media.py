@@ -7,9 +7,12 @@ can stay pure Python.
 from __future__ import annotations
 
 import json
+import logging
 import re
+import resource
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -23,8 +26,31 @@ class MediaError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Process helpers
 # ---------------------------------------------------------------------------
+def log_mem(stage: str) -> None:
+    """Record live and peak RSS around an ffmpeg call.
+
+    A host that kills the process for memory leaves no traceback, so this is
+    what shows which call was running and how much headroom was left.
+    """
+    live = peak = None
+    try:
+        for line in Path("/proc/self/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                live = int(line.split()[1]) / 1024
+                break
+    except OSError:
+        pass
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    peak = peak / (1 << 20) if sys.platform == "darwin" else peak / 1024
+    logging.getLogger(__name__).warning(
+        "[mem] %-28s live %s MB, peak %.0f MB", stage,
+        f"{live:.0f}" if live is not None else "?", peak)
+
+
 def run(cmd: Sequence[str], *, timeout: Optional[int] = None) -> subprocess.CompletedProcess:
     """Run a command, raising :class:`MediaError` with stderr on failure."""
+    label = Path(cmd[0]).name
+    log_mem(f"before {label}")
     proc = subprocess.run(
         list(cmd),
         stdout=subprocess.PIPE,
@@ -32,6 +58,7 @@ def run(cmd: Sequence[str], *, timeout: Optional[int] = None) -> subprocess.Comp
         text=True,
         timeout=timeout,
     )
+    log_mem(f"after {label}")
     if proc.returncode != 0:
         tail = "\n".join(proc.stderr.strip().splitlines()[-12:])
         raise MediaError(f"{cmd[0]} exited with {proc.returncode}:\n{tail}")
