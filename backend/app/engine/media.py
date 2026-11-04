@@ -250,6 +250,12 @@ def _ytdlp_options(fmt: str, client: Optional[str], outtmpl: Optional[str] = Non
         "retries": 5,
         "fragment_retries": 5,
         "socket_timeout": 30,
+        # YouTube scores an IPv6 /64 as a single address, so a noisy cloud
+        # neighbour taints every host behind it. Going out over IPv4 is what
+        # makes a home connection succeed where the same call fails on a server.
+        "source_address": "0.0.0.0",
+        # Retry bursts look like scraping and raise the bot score.
+        "sleep_interval_requests": 1,
     }
     if outtmpl:
         opts["outtmpl"] = outtmpl

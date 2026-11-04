@@ -7,9 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # ffmpeg from Debian ships libass (burned-in captions) and libx264; libgomp1 is
 # needed by ctranslate2, libgl1/libglib by opencv, fonts-dejavu is a fallback face.
+# nodejs is not used directly: yt-dlp needs a JavaScript runtime to solve
+# YouTube's challenges and mint PO tokens, without which cloud IPs are refused.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ffmpeg libgomp1 libgl1 libglib2.0-0 ca-certificates fonts-dejavu-core \
+      nodejs \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
