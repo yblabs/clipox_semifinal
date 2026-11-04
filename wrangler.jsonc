@@ -1,0 +1,13 @@
+{
+  "name": "clipox-semifinal",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./dist"
+  },
+  // Public backend origin. Kept in config (not a secret) so a deploy from
+  // Cloudflare's GitHub build carries it too; change it when the host changes.
+  "vars": {
+    "API_ORIGIN": "https://clipox-api.onrender.com"
+  }
+}
