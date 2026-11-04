@@ -126,7 +126,10 @@ def ffmpeg_thread_args() -> list[str]:
     if FFMPEG_THREADS <= 0:
         return []
     n = str(FFMPEG_THREADS)
-    return ["-threads", n, "-x264-params", f"threads={n}:lookahead_threads=1"]
+    # A short rate-control lookahead keeps x264 from buffering dozens of
+    # frames (each several MB at 1080x1920) while it plans the bitrate.
+    return ["-threads", n,
+            "-x264-params", f"threads={n}:lookahead_threads=1:rc-lookahead=6"]
 
 
 # Clip Maker
