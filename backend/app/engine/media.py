@@ -6,6 +6,7 @@ can stay pure Python.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -168,6 +169,8 @@ _YTDLP_CLIENTS: List[Optional[str]] = [
 # credentials or a non-datacenter egress address do. Both are supplied through
 # the environment so the deployment can be fixed without touching code.
 _YTDLP_COOKIES = os.getenv("WV_YTDLP_COOKIES", "").strip()
+# Base64 form for deployments whose env vars cannot carry newlines and tabs.
+_YTDLP_COOKIES_B64 = os.getenv("WV_YTDLP_COOKIES_B64", "").strip()
 _YTDLP_PROXY = os.getenv("WV_YTDLP_PROXY", "").strip()
 
 
@@ -177,6 +180,18 @@ def _cookie_file() -> Optional[str]:
     Hosted deployments have no shell to drop a file into, so the cookie text
     from a browser export can be given directly as an environment value.
     """
+    if _YTDLP_COOKIES_B64:
+        try:
+            text = base64.b64decode(_YTDLP_COOKIES_B64).decode("utf-8")
+        except Exception:
+            text = ""
+        if text:
+            target = Path(tempfile.gettempdir()) / "yt_cookies.txt"
+            try:
+                target.write_text(text, encoding="utf-8")
+                return str(target)
+            except OSError:
+                return None
     if not _YTDLP_COOKIES:
         return None
     path = Path(_YTDLP_COOKIES)
