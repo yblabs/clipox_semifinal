@@ -20,8 +20,11 @@ Pipeline
 """
 from __future__ import annotations
 
+import logging
 import math
 import re
+import resource
+import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -36,7 +39,7 @@ from ..config import (
 from . import media, scenes
 from .ass import generate_ass, style_summary
 from .llm import LLMUnavailable, complete_json, configured as llm_configured
-from .transcribe import format_timestamp, transcribe_audio
+from .transcribe import format_timestamp, release_model, transcribe_audio
 
 ProgressFn = Callable[[int, float, str], None]
 
@@ -633,6 +636,13 @@ def process(
     from ..config import TARGET_H, TARGET_W  # local import keeps module import cheap
 
     def report(step: int, pct: float, label: str) -> None:
+        # Peak RSS per stage: a host that kills the process for memory leaves no
+        # traceback, so the last stage's figure is the only evidence of where
+        # the budget went.
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        peak = peak / (1 << 20) if sys.platform == "darwin" else peak / 1024
+        logging.getLogger(__name__).warning(
+            "[%s] %5.1f%% %s (peak rss %.0f MB)", task_id[:8], pct, label, peak)
         if on_progress:
             on_progress(step, pct, label)
 
@@ -667,6 +677,9 @@ def process(
     # 3. transcript ------------------------------------------------------
     report(2, 14, "Transcribing with Whisper")
     transcript = transcribe_audio(audio_path, on_progress=lambda p: report(2, 14 + p * 0.25, "Transcribing with Whisper"))
+    # Nothing below needs the weights, and on a small host holding them starves
+    # the scene detector and the encoder of RAM.
+    release_model()
 
     # 4. scenes ----------------------------------------------------------
     report(3, 45, "Detecting scenes")
