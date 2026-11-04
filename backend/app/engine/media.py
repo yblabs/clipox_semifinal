@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -163,6 +164,9 @@ def save_upload(filename: str, chunk: Iterable[bytes], dest_dir: Path) -> Path:
 _YTDLP_CLIENTS: List[Optional[str]] = [
     None, "tv_simply", "web_embedded", "android_vr", "mweb", "tv", "ios", "android",
 ]
+
+# Seconds the metadata probe may spend before reporting what it knows.
+_METADATA_BUDGET = 30.0
 
 # Cloud hosts are given datacenter IPs, which YouTube answers with
 # "Sign in to confirm you're not a bot". No player client gets around that; only
@@ -392,10 +396,18 @@ def fetch_metadata(url: str) -> Dict[str, Any]:
 
     errors: List[str] = []
     info: Dict[str, Any] = {}
+    # The metadata probe answers an HTTP request, so it has to finish well
+    # inside the proxy's timeout. Walking every client on a small instance took
+    # longer than that, and the visitor saw a gateway error instead of the
+    # reason the link failed.
+    deadline = time.monotonic() + _METADATA_BUDGET
     for client in _clients_for(url):
         for fmt in _YTDLP_FORMATS:
+            if time.monotonic() > deadline:
+                break
             opts = _ytdlp_options(fmt, client)
             opts["skip_download"] = True
+            opts["socket_timeout"] = 12
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(url, download=False)
