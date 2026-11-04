@@ -159,7 +159,9 @@ def save_upload(filename: str, chunk: Iterable[bytes], dest_dir: Path) -> Path:
 # looser format selectors until one combination works.
 #
 # Player clients to try, in order; ``None`` = yt-dlp's default selection.
-_YTDLP_CLIENTS: List[Optional[str]] = [None, "android", "tv", "ios"]
+_YTDLP_CLIENTS: List[Optional[str]] = [
+    None, "tv_simply", "web_embedded", "android_vr", "mweb", "tv", "ios", "android",
+]
 
 # Cloud hosts are given datacenter IPs, which YouTube answers with
 # "Sign in to confirm you're not a bot". No player client gets around that; only
@@ -276,12 +278,14 @@ def _fail(errors: List[str], url: str):
         if err not in seen:
             seen.append(err)
     if any(_bot_check(err) for err in seen):
-        # The raw extractor text tells the user nothing they can act on.
+        # The raw extractor text tells the user nothing they can act on, but the
+        # attempts show whether any player client got further than the others.
+        tried = "|".join(err.split("ERROR:")[-1].strip()[:70] for err in seen[:4])
         raise MediaError(
             "YouTube is blocking downloads from this server (bot check), which "
             "happens with cloud IPs. Upload the video file instead — that path "
             "works the same. Server-side fixes are a proxy or YouTube cookies "
-            "on the backend.")
+            f"on the backend. [tried: {tried}]")
     raise MediaError(seen[0] if seen else f"yt-dlp could not read {url}")
 
 
