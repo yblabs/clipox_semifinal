@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import resource
 import shutil
@@ -159,6 +160,13 @@ def save_upload(filename: str, chunk: Iterable[bytes], dest_dir: Path) -> Path:
 # Player clients to try, in order; ``None`` = yt-dlp's default selection.
 _YTDLP_CLIENTS: List[Optional[str]] = [None, "android", "tv", "ios"]
 
+# Cloud hosts are given datacenter IPs, which YouTube answers with
+# "Sign in to confirm you're not a bot". No player client gets around that; only
+# credentials or a non-datacenter egress address do. Both are supplied through
+# the environment so the deployment can be fixed without touching code.
+_YTDLP_COOKIES = os.getenv("WV_YTDLP_COOKIES", "").strip()
+_YTDLP_PROXY = os.getenv("WV_YTDLP_PROXY", "").strip()
+
 # Format selectors from strictest (mp4 + m4a only) to loosest.
 _YTDLP_FORMATS: List[str] = [
     "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b",
@@ -199,6 +207,10 @@ def _ytdlp_options(fmt: str, client: Optional[str], outtmpl: Optional[str] = Non
     if outtmpl:
         opts["outtmpl"] = outtmpl
         opts["merge_output_format"] = "mp4"
+    if _YTDLP_COOKIES and Path(_YTDLP_COOKIES).is_file():
+        opts["cookiefile"] = _YTDLP_COOKIES
+    if _YTDLP_PROXY:
+        opts["proxy"] = _YTDLP_PROXY
     if client:
         opts["extractor_args"] = {"youtube": {"player_client": [client]}}
     return opts
@@ -211,7 +223,17 @@ _YTDLP_CLIENT_LEVEL = (
     "missing a url",
     "sabr",
     "no longer supported",
+    "sign in to confirm",
+    "not a bot",
 )
+
+# Datacenter IPs are refused by YouTube regardless of player client.
+_YTDLP_BOT_CHECK = ("sign in to confirm", "not a bot")
+
+
+def _bot_check(message: str) -> bool:
+    low = (message or "").lower()
+    return any(marker in low for marker in _YTDLP_BOT_CHECK)
 
 
 def _clients_for(url: str) -> List[Optional[str]]:
@@ -230,6 +252,13 @@ def _fail(errors: List[str], url: str):
     for err in errors:
         if err not in seen:
             seen.append(err)
+    if any(_bot_check(err) for err in seen):
+        # The raw extractor text tells the user nothing they can act on.
+        raise MediaError(
+            "YouTube is blocking downloads from this server (bot check), which "
+            "happens with cloud IPs. Upload the video file instead — that path "
+            "works the same. Server-side fixes are a proxy or YouTube cookies "
+            "on the backend.")
     raise MediaError(seen[0] if seen else f"yt-dlp could not read {url}")
 
 
