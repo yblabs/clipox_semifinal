@@ -177,24 +177,12 @@ _YTDLP_COOKIES = os.getenv("WV_YTDLP_COOKIES", "").strip()
 _YTDLP_COOKIES_B64 = os.getenv("WV_YTDLP_COOKIES_B64", "").strip()
 _YTDLP_PROXY = os.getenv("WV_YTDLP_PROXY", "").strip()
 
-# YouTube's player needs a Proof-of-Origin token minted by its own BotGuard
-# script. The generator is built into the image (see backend/Dockerfile) and
-# spawned per request; with no such build the plugin is simply left unused.
-_POT_SCRIPT = os.getenv(
-    "WV_POT_SCRIPT", "/root/bgutil-ytdlp-pot-provider/server/build/generate_once.js")
-
-
-def _pot_script() -> Optional[str]:
-    return _POT_SCRIPT if _POT_SCRIPT and Path(_POT_SCRIPT).is_file() else None
-
-
 def auth_status() -> Dict[str, bool]:
     """Whether yt-dlp has credentials or a non-datacenter egress available.
 
     Reported by the health endpoint without exposing any cookie value.
     """
-    return {"cookies": bool(_cookie_file()), "proxy": bool(_YTDLP_PROXY),
-            "po_tokens": bool(_pot_script())}
+    return {"cookies": bool(_cookie_file()), "proxy": bool(_YTDLP_PROXY)}
 
 
 def _cookie_file() -> Optional[str]:
@@ -286,9 +274,6 @@ def _ytdlp_options(fmt: str, client: Optional[str], outtmpl: Optional[str] = Non
     args: Dict[str, Any] = {}
     if client:
         args["youtube"] = {"player_client": [client]}
-    pot = _pot_script()
-    if pot:
-        args["youtubepot-bgutilscript"] = {"script_path": [pot]}
     if args:
         opts["extractor_args"] = args
     return opts
@@ -332,18 +317,15 @@ def _fail(errors: List[str], url: str):
             seen.append(err)
     # A dead video is reported as such by every client; blaming the bot wall
     # there would send the visitor chasing a problem they cannot fix.
-    readable = [err for err in seen if not _bot_check(err)]
-    if readable and any(err is readable[0] for err in seen):
-        raise MediaError(readable[0])
+    dead = [err for err in seen if _is_fatal(err)]
+    if dead:
+        raise MediaError(dead[0])
     if any(_bot_check(err) for err in seen):
-        # The raw extractor text tells the user nothing they can act on, but the
-        # attempts show whether any player client got further than the others.
-        tried = "|".join(err.split("ERROR:")[-1].strip()[:70] for err in seen[:4])
         raise MediaError(
             "YouTube is blocking downloads from this server (bot check), which "
             "happens with cloud IPs. Upload the video file instead — that path "
             "works the same. Server-side fixes are a proxy or YouTube cookies "
-            f"on the backend. [tried: {tried}]")
+            "on the backend.")
     raise MediaError(seen[0] if seen else f"yt-dlp could not read {url}")
 
 
