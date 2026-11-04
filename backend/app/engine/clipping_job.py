@@ -13,6 +13,8 @@ Library and export endpoints can reopen it by id.
 from __future__ import annotations
 
 import logging
+import resource
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -176,6 +178,12 @@ def run(
     settings = clean_settings(settings)
 
     def report(step: int, pct: float, label: str) -> None:
+        # Peak RSS per stage: a host that kills the process for memory leaves no
+        # traceback, so the last stage's figure is the only evidence of where
+        # the budget went.
+        peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        peak_mb = peak_mb / (1 << 20) if sys.platform == "darwin" else peak_mb / 1024
+        log.info("[%s] %5.1f%% %s (peak rss %.0f MB)", task_id[:8], pct, label, peak_mb)
         if on_progress:
             on_progress(step, pct, label)
 
