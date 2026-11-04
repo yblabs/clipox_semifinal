@@ -173,13 +173,24 @@ _YTDLP_COOKIES = os.getenv("WV_YTDLP_COOKIES", "").strip()
 _YTDLP_COOKIES_B64 = os.getenv("WV_YTDLP_COOKIES_B64", "").strip()
 _YTDLP_PROXY = os.getenv("WV_YTDLP_PROXY", "").strip()
 
+# YouTube's player needs a Proof-of-Origin token minted by its own BotGuard
+# script. The generator is built into the image (see backend/Dockerfile) and
+# spawned per request; with no such build the plugin is simply left unused.
+_POT_SCRIPT = os.getenv(
+    "WV_POT_SCRIPT", "/root/bgutil-ytdlp-pot-provider/server/build/generate_once.js")
+
+
+def _pot_script() -> Optional[str]:
+    return _POT_SCRIPT if _POT_SCRIPT and Path(_POT_SCRIPT).is_file() else None
+
 
 def auth_status() -> Dict[str, bool]:
     """Whether yt-dlp has credentials or a non-datacenter egress available.
 
     Reported by the health endpoint without exposing any cookie value.
     """
-    return {"cookies": bool(_cookie_file()), "proxy": bool(_YTDLP_PROXY)}
+    return {"cookies": bool(_cookie_file()), "proxy": bool(_YTDLP_PROXY),
+            "po_tokens": bool(_pot_script())}
 
 
 def _cookie_file() -> Optional[str]:
@@ -265,8 +276,14 @@ def _ytdlp_options(fmt: str, client: Optional[str], outtmpl: Optional[str] = Non
         opts["cookiefile"] = cookies
     if _YTDLP_PROXY:
         opts["proxy"] = _YTDLP_PROXY
+    args: Dict[str, Any] = {}
     if client:
-        opts["extractor_args"] = {"youtube": {"player_client": [client]}}
+        args["youtube"] = {"player_client": [client]}
+    pot = _pot_script()
+    if pot:
+        args["youtubepot-bgutilscript"] = {"script_path": [pot]}
+    if args:
+        opts["extractor_args"] = args
     return opts
 
 
